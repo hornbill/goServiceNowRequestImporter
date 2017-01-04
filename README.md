@@ -717,8 +717,8 @@ Connection information for the Hornbill instance:
 #### SNAppDBConf
 Contains the connection information for the ServiceNow application database.
 * "Driver" the driver to use to connect to the database that holds the ServiceNow application information:
-* mysql = MySQL Server v5.0 or above, or MariaDB
-* mssql = Microsoft SQL Server (2005 or above)
+    * mysql = MySQL Server v5.0 or above, or MariaDB
+    * mssql = Microsoft SQL Server (2005 or above)
 * "Server" The address of the SQL server
 * "UserName" The username for the SQL database
 * "Password" Password for above User Name
@@ -739,19 +739,19 @@ Contains request-class specific configuration. This section should be repeated f
 * DefaultService - If a request is being imported, and the tool cannot verify its Service from the mapping, then the Service from this variable is used to log the request.
 * SQLStatement - The SQL query used to get call (and extended) information from the ServiceNow application data. This is broken up in to numbered elements, for ease of reading and updating.
 * CoreFieldMapping - The core fields used by the API calls to raise requests within Service Manager, and how the ServiceNow data should be mapped in to these fields.
-* - Any value wrapped with [] will be populated with the corresponding response from the SQL Query
-* - Any Other Value is treated literally as written example:
-* -- "h_summary":"[short_description]", - the value of short_description is taken from the SQL output and populated within the request summary field
-* -- "h_description":"ServiceNow Incident Task Reference: [callref]\n\n[description]", - the request description would be populated with "ServiceNow Incident Task Reference: ", followed by the ServiceNow Task reference, 2 new lines then the description text from the ServiceNow task.
-* Core Fields that can resolve associated record from passed-through value:   
-* -- "h_site_id":"[site]", - When a string is passed to the site field, the script attempts to resolve the given site name against the Site entity, and populates the request with the correct site information. If the site cannot be resolved, the site details are not populated for the request being imported.
-* -- "h_fk_user_id":"[requested_for_username]", - As site, above, but resolves the original request customer against the users or contacts within Hornbill.
-* -- "h_ownerid":"[owner]", - As site, above, but resolves the original request owner against the analysts within Hornbill.
-* -- "h_category_id":"[symptom_name]", - As site, above, but uses additional CategoryMapping from the configuration, as detailed below.
-* -- "h_closure_category_id":"[close_code]", - As site, above, but uses additional ResolutionCategoryMapping from the configuration, as detailed below.
-* -- "h_ownerid":"[owner_username]", - As site, above, but resolves the original request owner against the analysts within Hornbill.
-* -- "h_fk_team_id":"[support_group]", - As site, above,  but uses additional TeamMapping from the configuration, as detailed below.
-* -- "h_fk_priorityid":"[priority]", - As site, above, but uses additional PriorityMapping from the configuration, as detailed below.
+    * Any value wrapped with [] will be populated with the corresponding response from the SQL Query
+    * Any Other Value is treated literally as written example:
+        * "h_summary":"[short_description]", - the value of short_description is taken from the SQL output and populated within the request summary field
+        * "h_description":"ServiceNow Incident Task Reference: [callref]\n\n[description]", - the request description would be populated with "ServiceNow Incident Task Reference: ", followed by the ServiceNow Task reference, 2 new lines then the description text from the ServiceNow task.
+    * Core Fields that can resolve associated record from passed-through value:   
+        * "h_site_id":"[site]", - When a string is passed to the site field, the script attempts to resolve the given site name against the Site entity, and populates the request with the correct site information. If the site cannot be resolved, the site details are not populated for the request being imported.
+        * "h_fk_user_id":"[requested_for_username]", - As site, above, but resolves the original request customer against the users or contacts within Hornbill. 
+        * "h_ownerid":"[owner]", - As site, above, but resolves the original request owner against the analysts within Hornbill.
+        * "h_category_id":"[symptom_name]", - As site, above, but uses additional CategoryMapping from the configuration, as detailed below.
+        * "h_closure_category_id":"[close_code]", - As site, above, but uses additional ResolutionCategoryMapping from the configuration, as detailed below.
+        * "h_ownerid":"[owner_username]", - As site, above, but resolves the original request owner against the analysts within Hornbill.
+        * "h_fk_team_id":"[support_group]", - As site, above,  but uses additional TeamMapping from the configuration, as detailed below.
+        * "h_fk_priorityid":"[priority]", - As site, above, but uses additional PriorityMapping from the configuration, as detailed below.
 * AdditionalFieldMapping - Contains additional columns that can be stored against the new request record. Mapping rules are as above.
 * StatusMapping - Allows for the mapping of task-class specific Statuses between ServiceNow and Hornbill Service Manager, where the left-side properties list the Statuses from ServiceNow, and the right-side values are the corresponding Statuses from Hornbill that should be used when importing requests.
 * PriorityMapping - Allows for the mapping of task-class specific Priorities between ServiceNow and Hornbill Service Manager, where the left-side properties list the Priorities from ServiceNow, and the right-side values are the corresponding Priorities from Hornbill that should be used when escalating the imported requests.
@@ -793,7 +793,7 @@ Command Line Parameters
 # Testing
 If you run the application with the argument dryrun=true then no requests will be logged - the XML used to raise requests will instead be saved in to the log file so you can ensure the data mappings are correct before running the import.
 
-'servicenow_request_import.exe -dryrun=true'
+'servicenow_request_import_w64.exe -dryrun=true'
 
 # Logging
 All Logging output is saved in the log directory in the same directory as the executable the file name contains the date and time the import was run 'SN_Task_Import_2015-11-06T14-26-13Z.log'
