@@ -8,14 +8,6 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
-	"github.com/hornbill/color"
-	_ "github.com/hornbill/go-mssqldb" //Microsoft SQL Server driver - v2005+
-	"github.com/hornbill/goapiLib"
-	_ "github.com/hornbill/mysql"    //MySQL v4.1 to v5.x and MariaDB driver
-	_ "github.com/hornbill/mysql320" //MySQL v3.2.0 to v5 driver
-	"github.com/hornbill/pb"
-	"github.com/hornbill/spinner"
-	"github.com/hornbill/sqlx"
 	"html"
 	"io/ioutil"
 	"log"
@@ -25,10 +17,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hornbill/color"
+	_ "github.com/hornbill/go-mssqldb" //Microsoft SQL Server driver - v2005+
+	apiLib "github.com/hornbill/goapiLib"
+	_ "github.com/hornbill/mysql"    //MySQL v4.1 to v5.x and MariaDB driver
+	_ "github.com/hornbill/mysql320" //MySQL v3.2.0 to v5 driver
+	"github.com/hornbill/pb"
+	"github.com/hornbill/spinner"
+	"github.com/hornbill/sqlx"
 )
 
 const (
-	version           = "1.0"
+	version           = "1.0.1"
 	appServiceManager = "com.hornbill.servicemanager"
 )
 
@@ -42,6 +43,7 @@ var (
 	configZone             string
 	configDryRun           bool
 	configDebug            bool
+	configVersion          bool
 	configMaxRoutines      string
 	connStrAppDB           string
 	counters               counterTypeStruct
@@ -341,8 +343,14 @@ func main() {
 	flag.BoolVar(&configDebug, "debug", false, "Full DEBUG output to log file")
 	flag.StringVar(&configMaxRoutines, "concurrent", "1", "Maximum number of requests to import concurrently.")
 	flag.BoolVar(&boolProcessAttachments, "attachments", true, "Defaults to true. Set to false to skip the import of file attachments.")
+	flag.BoolVar(&configVersion, "version", false, "Return the Version number")
 	flag.Parse()
 
+	//-- If configVersion just output version number and die
+	if configVersion {
+		fmt.Printf("%v \n", version)
+		return
+	}
 	//-- Output to CLI and Log
 	logger(1, "---- ServiceNow Task Import Utility V"+fmt.Sprintf("%v", version)+" ----", true)
 	logger(1, "Flag - Config File "+fmt.Sprintf("%s", configFileName), true)
@@ -2121,6 +2129,7 @@ func searchSite(siteName string) (bool, int) {
 	boolReturn := false
 	intReturn := 0
 	//-- ESP Query for site
+	espXmlmc.SetParam("application", "com.hornbill.core")
 	espXmlmc.SetParam("entity", "Site")
 	espXmlmc.SetParam("matchScope", "all")
 	espXmlmc.OpenElement("searchFilter")
@@ -2284,7 +2293,7 @@ func searchTeam(teamName string) (bool, string) {
 	if err != nil {
 		return false, "Unable to create connection"
 	}
-
+	espXmlmc.SetParam("application", "com.hornbill.core")
 	espXmlmc.SetParam("entity", "Groups")
 	espXmlmc.SetParam("matchScope", "all")
 	espXmlmc.OpenElement("searchFilter")
