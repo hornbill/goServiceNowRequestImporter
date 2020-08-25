@@ -18,7 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hornbill/color"
+	"github.com/tcnksm/go-latest" //-- For Version checking
+
+	"github.com/fatih/color"
 	_ "github.com/hornbill/go-mssqldb" //Microsoft SQL Server driver - v2005+
 	apiLib "github.com/hornbill/goapiLib"
 	_ "github.com/hornbill/mysql"    //MySQL v4.1 to v5.x and MariaDB driver
@@ -29,7 +31,8 @@ import (
 )
 
 const (
-	version           = "1.0.1"
+	version           = "1.1.0"
+	repo              = "goServiceNowRequestImporter"
 	appServiceManager = "com.hornbill.servicemanager"
 )
 
@@ -353,6 +356,7 @@ func main() {
 	}
 	//-- Output to CLI and Log
 	logger(1, "---- ServiceNow Task Import Utility V"+fmt.Sprintf("%v", version)+" ----", true)
+	checkVersion()
 	logger(1, "Flag - Config File "+fmt.Sprintf("%s", configFileName), true)
 	logger(1, "Flag - Zone "+fmt.Sprintf("%s", configZone), true)
 	logger(1, "Flag - Dry Run "+fmt.Sprintf("%v", configDryRun), true)
@@ -1254,6 +1258,9 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 		// Request Status
 		if strAttribute == "h_status" {
 			espXmlmc.SetParam(strAttribute, strStatus)
+			if strStatus == "status.cancelled" {
+				espXmlmc.SetParam("h_archived", "1")
+			}
 			boolAutoProcess = false
 		}
 
@@ -1481,12 +1488,16 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 				if strNewCallRef != "" && strServiceBPM != "" {
 					espXmlmc.SetParam("application", appServiceManager)
 					espXmlmc.SetParam("name", strServiceBPM)
-					espXmlmc.OpenElement("inputParams")
-					espXmlmc.SetParam("objectRefUrn", "urn:sys:entity:"+appServiceManager+":Requests:"+strNewCallRef)
-					espXmlmc.SetParam("requestId", strNewCallRef)
-					espXmlmc.CloseElement("inputParams")
-
-					XMLBPM, xmlmcErr := espXmlmc.Invoke("bpm", "processSpawn")
+					espXmlmc.SetParam("reference", strNewCallRef)
+					espXmlmc.OpenElement("inputParam")
+					espXmlmc.SetParam("name", "objectRefUrn")
+					espXmlmc.SetParam("value", "urn:sys:entity:"+appServiceManager+":Requests:"+strNewCallRef)
+					espXmlmc.CloseElement("inputParam")
+					espXmlmc.OpenElement("inputParam")
+					espXmlmc.SetParam("name", "requestId")
+					espXmlmc.SetParam("value", strNewCallRef)
+					espXmlmc.CloseElement("inputParam")
+					XMLBPM, xmlmcErr := espXmlmc.Invoke("bpm", "processSpawn2")
 					if xmlmcErr != nil {
 						//log.Fatal(xmlmcErr)
 						logger(4, "Unable to invoke BPM for request ["+strNewCallRef+"]: "+fmt.Sprintf("%v", xmlmcErr), false)
@@ -2635,4 +2646,21 @@ func NewEspXmlmcSession() (*apiLib.XmlmcInstStruct, error) {
 	espXmlmcLocal := apiLib.NewXmlmcInstance(snImportConf.HBConf.URL)
 	espXmlmcLocal.SetSessionID(espXmlmc.GetSessionID())
 	return espXmlmcLocal, nil
+}
+
+//-- Check Latest
+func checkVersion() {
+	githubTag := &latest.GithubTag{
+		Owner:      "hornbill",
+		Repository: repo,
+	}
+
+	res, err := latest.Check(githubTag, version)
+	if err != nil {
+		logger(4, "Unable to check utility version against Github repository: "+err.Error(), true)
+		return
+	}
+	if res.Outdated {
+		logger(5, version+" is not latest, you should upgrade to "+res.Current+" by downloading the latest package Here https://github.com/hornbill/"+repo+"/releases/tag/v"+res.Current, true)
+	}
 }
