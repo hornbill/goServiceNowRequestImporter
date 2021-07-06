@@ -22,7 +22,7 @@ import (
 
 	"github.com/fatih/color"
 	_ "github.com/hornbill/go-mssqldb" //Microsoft SQL Server driver - v2005+
-	apiLib "github.com/hornbill/goapiLib"
+	apiLib "github.com/hornbill/goApiLib"
 	_ "github.com/hornbill/mysql"    //MySQL v4.1 to v5.x and MariaDB driver
 	_ "github.com/hornbill/mysql320" //MySQL v3.2.0 to v5 driver
 	"github.com/hornbill/pb"
@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version           = "1.1.0"
+	version           = "1.1.1"
 	repo              = "goServiceNowRequestImporter"
 	appServiceManager = "com.hornbill.servicemanager"
 )
