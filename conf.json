@@ -14,6 +14,7 @@
     "Encrypt": false
   },
   "CustomerType": "0",
+  "CustomerUniqueColumn": "h_user_id",
   "ConfIncident": {
     "Import":false,
     "CallClass": "Incident",
