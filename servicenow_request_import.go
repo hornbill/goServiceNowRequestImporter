@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version           = "1.2.0beta"
+	version           = "1.3.0"
 	repo              = "goServiceNowRequestImporter"
 	appServiceManager = "com.hornbill.servicemanager"
 )
@@ -67,7 +67,6 @@ var (
 	startTime              time.Time
 	endTime                time.Duration
 	espXmlmc               *apiLib.XmlmcInstStruct
-	xmlmcInstanceConfig    xmlmcConfigStruct
 	mutexAnalysts          = &sync.Mutex{}
 	mutexArrCallsLogged    = &sync.Mutex{}
 	mutexBar               = &sync.Mutex{}
@@ -100,6 +99,7 @@ type snImportConfStruct struct {
 	HBConf                    hbConfStruct //Hornbill Instance connection details
 	CustomerType              string
 	CustomerUniqueColumn      string
+	AnalystUniqueColumn       string
 	SNAppDBConf               appDBConfStruct //ServiceNow Database connection details
 	ConfIncident              snCallConfStruct
 	ConfServiceRequest        snCallConfStruct
@@ -156,12 +156,6 @@ type snActivityConfStruct struct {
 	Reason       string
 }
 
-//----- XMLMC Config and Interaction Structs
-type xmlmcConfigStruct struct {
-	instance string
-	url      string
-	zone     string
-}
 type xmlmcResponse struct {
 	MethodResult string      `xml:"status,attr"`
 	State        stateStruct `xml:"state"`
@@ -271,15 +265,9 @@ type xmlmcCategoryListResponse struct {
 
 //----- Analyst Structs
 type analystListStruct struct {
-	AnalystID   string
-	AnalystName string
-}
-type xmlmcAnalystListResponse struct {
-	MethodResult     string      `xml:"status,attr"`
-	AnalystFullName  string      `xml:"params>name"`
-	AnalystFirstName string      `xml:"params>firstName"`
-	AnalystLastName  string      `xml:"params>lastName"`
-	State            stateStruct `xml:"state"`
+	AnalystID     string
+	AnalystHandle string
+	AnalystName   string
 }
 
 //----- Customer Structs
@@ -291,6 +279,7 @@ type customerListStruct struct {
 type xmlmcCustomerListResponse struct {
 	MethodResult      string      `xml:"status,attr"`
 	CustomerID        string      `xml:"params>rowData>row>h_user_id"`
+	CustomerFullName  string      `xml:"params>rowData>row>h_name"`
 	CustomerFirstName string      `xml:"params>rowData>row>h_first_name"`
 	CustomerLastName  string      `xml:"params>rowData>row>h_last_name"`
 	ContactID         string      `xml:"params>rowData>row>h_pk_id"`
@@ -301,6 +290,12 @@ type xmlmcCustomerListResponse struct {
 
 func initXMLMC() {
 
+	//Does endpoint exist?
+	instanceEndpoint := apiLib.GetEndPointFromName(snImportConf.HBConf.InstanceID)
+	if instanceEndpoint == "" {
+		color.Red("The provided instance ID [" + snImportConf.HBConf.InstanceID + "] could not be found.")
+		return
+	}
 	espXmlmc = apiLib.NewXmlmcInstance(snImportConf.HBConf.InstanceID)
 	espXmlmc.SetAPIKey(snImportConf.HBConf.APIKey)
 	espXmlmc.SetTimeout(60)
@@ -387,6 +382,13 @@ func main() {
 		pageSize = snImportConf.HBConf.pageSize
 	}
 
+	if snImportConf.CustomerUniqueColumn == "" {
+		snImportConf.CustomerUniqueColumn = "h_user_id"
+	}
+	if snImportConf.AnalystUniqueColumn == "" {
+		snImportConf.AnalystUniqueColumn = "h_user_id"
+	}
+
 	//Check maxGoroutines for valid value
 	maxRoutines, err := strconv.Atoi(configMaxRoutines)
 	if err != nil {
@@ -421,11 +423,6 @@ func main() {
 		logger(4, "The SQL driver ("+snImportConf.SNAppDBConf.Driver+") for the ServiceNow Application Database specified in the configuration file is not valid.", true)
 		return
 	}
-
-	//-- Set Instance ID
-	SetInstance(configZone, snImportConf.HBConf.InstanceID)
-	//-- Generate Instance XMLMC Endpoint
-	snImportConf.HBConf.URL = getInstanceURL()
 
 	//-- Build DB connection strings for ServiceNow Data Source
 	connStrAppDB = buildConnectionString()
@@ -843,12 +840,14 @@ func addActivity(callMap map[string]interface{}, smCallRef string) bool {
 		espXmlmc.SetParam("dueDate", strDueDate)
 	}
 	if strAssignTo != "" {
-		boolUserExists := doesAnalystExist(strAssignTo)
-		if !boolUserExists {
-			boolUserExists = doesCustomerExist(strAssignTo)
-		}
+		boolUserExists, strAssignToID := doesAnalystExist(strAssignTo)
 		if boolUserExists {
-			espXmlmc.SetParam("assignTo", "urn:sys:user:"+strAssignTo)
+			espXmlmc.SetParam("assignTo", "urn:sys:user:"+strAssignToID)
+		} else {
+			boolUserExists = doesCustomerExist(strAssignTo)
+			if boolUserExists {
+				espXmlmc.SetParam("assignTo", "urn:sys:user:"+strAssignTo)
+			}
 		}
 	}
 	if strCategory == "BPM Authorisation" {
@@ -1098,7 +1097,7 @@ func queryDBCallDetails(callClass, connString string) bool {
 		//Build map full of calls to import
 		for rows.Next() {
 			results := make(map[string]interface{})
-			err = rows.MapScan(results)
+			_ = rows.MapScan(results)
 			//Stick marshalled data map in to parent slice
 			arrActivityDetailsMaps = append(arrActivityDetailsMaps, results)
 		}
@@ -1109,7 +1108,7 @@ func queryDBCallDetails(callClass, connString string) bool {
 		//Build map full of calls to import
 		for rows.Next() {
 			results := make(map[string]interface{})
-			err = rows.MapScan(results)
+			_ = rows.MapScan(results)
 			//Stick marshalled data map in to parent slice
 			arrCallDetailsMaps = append(arrCallDetailsMaps, results)
 		}
@@ -1156,10 +1155,10 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 		if strAttribute == "h_ownerid" {
 			strOwnerID := getFieldValue(strMapping, callMap)
 			if strOwnerID != "" {
-				boolAnalystExists := doesAnalystExist(strOwnerID)
+				boolAnalystExists, strOwnerID := doesAnalystExist(strOwnerID)
 				if boolAnalystExists {
 					//Get analyst from cache as exists
-					analystIsInCache, strOwnerName, _ := recordInCache(strOwnerID, "Analyst")
+					analystIsInCache, strOwnerName, strOwnerID := recordInCache(strOwnerID, "Analyst")
 					if analystIsInCache && strOwnerName != "" {
 						espXmlmc.SetParam(strAttribute, strOwnerID)
 						espXmlmc.SetParam("h_ownername", strOwnerName)
@@ -1192,7 +1191,7 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 			strPriorityID := getFieldValue(strMapping, callMap)
 			strPriorityMapped, strPriorityName := getCallPriorityID(strPriorityID)
 			if strPriorityMapped == "" && mapGenericConf.DefaultPriority != "" {
-				strPriorityID = getPriorityID(mapGenericConf.DefaultPriority)
+				strPriorityMapped = getPriorityID(mapGenericConf.DefaultPriority)
 				strPriorityName = mapGenericConf.DefaultPriority
 			}
 			espXmlmc.SetParam(strAttribute, strPriorityMapped)
@@ -1937,52 +1936,18 @@ func getCategoryID(categoryCode, categoryGroup string) (string, string) {
 }
 
 //doesAnalystExist takes an Analyst ID string and returns a true if one exists in the cache or on the Instance
-func doesAnalystExist(analystID string) bool {
-	espXmlmc, err := NewEspXmlmcSession()
-	if err != nil {
-		return false
-	}
+func doesAnalystExist(analystID string) (bool, string) {
+	strReturnID := ""
 	boolAnalystExists := false
 	if analystID != "" {
-		analystIsInCache, strReturn, _ := recordInCache(analystID, "Analyst")
+		analystIsInCache, strReturn, X := recordInCache(analystID, "Analyst")
+		strReturnID = X
 		//-- Check if we have cached the Analyst already
 		if analystIsInCache && strReturn != "" {
 			boolAnalystExists = true
-		} else {
-			//Get Analyst Info
-			espXmlmc.SetParam("userId", analystID)
-
-			XMLAnalystSearch, xmlmcErr := espXmlmc.Invoke("admin", "userGetInfo")
-			if xmlmcErr != nil {
-				logger(4, "Unable to Search for Request Owner ["+analystID+"]: "+xmlmcErr.Error(), true)
-			}
-
-			var xmlRespon xmlmcAnalystListResponse
-			err := xml.Unmarshal([]byte(XMLAnalystSearch), &xmlRespon)
-			if err != nil {
-				logger(4, "Unable to Search for Request Owner ["+analystID+"]: "+err.Error(), false)
-			} else {
-				if xmlRespon.MethodResult != "ok" {
-					//Analyst most likely does not exist
-					logger(4, "Unable to Search for Request Owner ["+analystID+"]: "+xmlRespon.State.ErrorRet, false)
-				} else {
-					//-- Check Response
-					if xmlRespon.AnalystFullName != "" {
-						boolAnalystExists = true
-						//-- Add Analyst to Cache
-						var newAnalystForCache analystListStruct
-						newAnalystForCache.AnalystID = analystID
-						newAnalystForCache.AnalystName = xmlRespon.AnalystFullName
-						analystNamedMap := []analystListStruct{newAnalystForCache}
-						mutexAnalysts.Lock()
-						analysts = append(analysts, analystNamedMap...)
-						mutexAnalysts.Unlock()
-					}
-				}
-			}
 		}
 	}
-	return boolAnalystExists
+	return boolAnalystExists, strReturnID
 }
 
 //doesCustomerExist takes a Customer ID string and returns a true if one exists in the cache or on the Instance
@@ -2110,6 +2075,7 @@ func recordInCache(recordName, recordType string) (bool, string, string) {
 		for _, analyst := range analysts {
 			if strings.EqualFold(analyst.AnalystID, recordName) {
 				boolReturn = true
+				strReturnID = analyst.AnalystHandle
 				strReturn = analyst.AnalystName
 			}
 		}
@@ -2348,12 +2314,17 @@ func searchTeam(teamName string) (bool, string) {
 	if err != nil {
 		return false, "Unable to create connection"
 	}
-	espXmlmc.SetParam("application", "com.hornbill.core")
-	espXmlmc.SetParam("entity", "Groups")
+	espXmlmc.SetParam("application", "com.hornbill.servicemanager")
+	espXmlmc.SetParam("entity", "Team")
 	espXmlmc.SetParam("matchScope", "all")
 	espXmlmc.OpenElement("searchFilter")
 	espXmlmc.SetParam("column", "h_name")
 	espXmlmc.SetParam("value", teamName)
+	espXmlmc.SetParam("matchType", "exact")
+	espXmlmc.CloseElement("searchFilter")
+	espXmlmc.OpenElement("searchFilter")
+	espXmlmc.SetParam("column", "h_type")
+	espXmlmc.SetParam("value", "1")
 	espXmlmc.SetParam("matchType", "exact")
 	espXmlmc.CloseElement("searchFilter")
 	espXmlmc.SetParam("maxResults", "1")
@@ -2608,44 +2579,14 @@ func logger(t int, s string, outputtoCLI bool) {
 	mutexLogging.Unlock()
 }
 
-// espLogger -- Log to ESP
-func espLogger(message string, severity string) {
-
-	espXmlmc.SetParam("fileName", "SN_Task_Import")
-	espXmlmc.SetParam("group", "general")
-	espXmlmc.SetParam("severity", severity)
-	espXmlmc.SetParam("message", message)
-	espXmlmc.Invoke("system", "logMessage")
-}
-
 // SetInstance sets the Zone and Instance config from the passed-through strZone and instanceID values
-func SetInstance(strZone string, instanceID string) {
-	//-- Set Zone
-	SetZone(strZone)
-	//-- Set Instance
-	xmlmcInstanceConfig.instance = instanceID
-}
-
-// SetZone - sets the Instance Zone to Overide current live zone
-func SetZone(zone string) {
-	xmlmcInstanceConfig.zone = zone
-}
-
-// getInstanceURL -- Function to build XMLMC End Point
-func getInstanceURL() string {
-	xmlmcInstanceConfig.url = "https://"
-	xmlmcInstanceConfig.url += xmlmcInstanceConfig.zone
-	xmlmcInstanceConfig.url += "api.hornbill.com/"
-	xmlmcInstanceConfig.url += xmlmcInstanceConfig.instance
-	xmlmcInstanceConfig.url += "/xmlmc/"
-	return xmlmcInstanceConfig.url
-}
 
 //NewEspXmlmcSession - New Xmlmc Session variable (Cloned Session)
 func NewEspXmlmcSession() (*apiLib.XmlmcInstStruct, error) {
 	time.Sleep(150 * time.Millisecond)
-	espXmlmcLocal := apiLib.NewXmlmcInstance(snImportConf.HBConf.URL)
-	espXmlmcLocal.SetSessionID(espXmlmc.GetSessionID())
+	espXmlmcLocal := apiLib.NewXmlmcInstance(snImportConf.HBConf.InstanceID)
+	espXmlmcLocal.SetAPIKey(snImportConf.HBConf.APIKey)
+	espXmlmcLocal.SetTimeout(60)
 	return espXmlmcLocal, nil
 }
 

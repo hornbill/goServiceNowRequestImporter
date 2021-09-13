@@ -28,6 +28,7 @@ type userAccountStruct struct {
 	HLastName   string `xml:"h_last_name"`
 	HEmail      string `xml:"h_email"`
 	HAttrib1    string `xml:"h_attrib_1"`
+	HClass      string `xml:"h_class"`
 }
 type xmlmcCountResponse struct {
 	Params struct {
@@ -127,6 +128,48 @@ func getUserAccountList(count uint64) {
 			mutexCustomers.Lock()
 			customers = append(customers, customerNamedMap...)
 			mutexCustomers.Unlock()
+
+			if JSONResp.Params.RowData.Row[index].HClass == "1" {
+				var newAnalystForCache analystListStruct
+				switch snImportConf.AnalystUniqueColumn {
+				case "h_user_id":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HUserID
+					}
+				case "h_employee_id":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HEmployeeID
+					}
+				case "h_login_id":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HLoginID
+					}
+				case "h_email":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HEmail
+					}
+				case "h_name":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HName
+					}
+				case "h_attrib_1":
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HAttrib1
+					}
+				default:
+					{
+						newAnalystForCache.AnalystID = JSONResp.Params.RowData.Row[index].HUserID
+					}
+				}
+				newAnalystForCache.AnalystHandle = JSONResp.Params.RowData.Row[index].HUserID
+				newAnalystForCache.AnalystName = JSONResp.Params.RowData.Row[index].HName
+				analystNamedMap := []analystListStruct{newAnalystForCache}
+				mutexAnalysts.Lock()
+				analysts = append(analysts, analystNamedMap...)
+				mutexAnalysts.Unlock()
+
+			}
+
 		}
 
 		// Add 100

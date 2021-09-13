@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 1.3.0 (September 13th, 2021)
+
+Changes:
+
+- Added ability to specify unique column for Analyst (owner) AnalystUniqueColumn a
+- using API Key and Instance ID
+
 ## 1.2.0 (August 31st, 2021)
 
 Changes:

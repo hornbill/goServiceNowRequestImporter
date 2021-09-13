@@ -1,8 +1,8 @@
 {
   "HBConf": {
-    "UserName": "Hornbill Instance Username",
-    "Password": "Hornbill Instance Password",
-    "InstanceID": "Hornbill Instance ID (case sensitive)"
+    "APIKey": "",
+    "InstanceID": "",
+    "pageSize": 100
   },
   "SNAppDBConf": {
     "Driver": "mysql",
@@ -15,6 +15,7 @@
   },
   "CustomerType": "0",
   "CustomerUniqueColumn": "h_user_id",
+  "AnalystUniqueColumn": "h_user_id",
   "ConfIncident": {
     "Import":false,
     "CallClass": "Incident",
