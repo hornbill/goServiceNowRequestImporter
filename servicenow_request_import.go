@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version           = "1.3.0"
+	version           = "1.3.1"
 	repo              = "goServiceNowRequestImporter"
 	appServiceManager = "com.hornbill.servicemanager"
 )
@@ -730,7 +730,7 @@ func addFileAttachmentToRequest(fileRecord fileAssocStruct) bool {
 			espXmlmc.SetParam("h_request_id", attPriKey)
 			espXmlmc.SetParam("h_description", "Originally added by "+fileRecord.AddedBy)
 			espXmlmc.SetParam("h_filename", useFileName)
-			espXmlmc.SetParam("h_contentlocation", xmlRespon.ContentLocation)
+			//espXmlmc.SetParam("h_contentlocation", xmlRespon.ContentLocation)
 			espXmlmc.SetParam("h_timestamp", fileRecord.TimeAdded)
 			espXmlmc.SetParam("h_visibility", "trustedGuest")
 			espXmlmc.CloseElement("record")
@@ -840,7 +840,7 @@ func addActivity(callMap map[string]interface{}, smCallRef string) bool {
 		espXmlmc.SetParam("dueDate", strDueDate)
 	}
 	if strAssignTo != "" {
-		boolUserExists, strAssignToID := doesAnalystExist(strAssignTo)
+		boolUserExists, _, strAssignToID := recordInCache(strAssignTo, "Analyst")
 		if boolUserExists {
 			espXmlmc.SetParam("assignTo", "urn:sys:user:"+strAssignToID)
 		} else {
@@ -1117,6 +1117,15 @@ func queryDBCallDetails(callClass, connString string) bool {
 	return true
 }
 
+func inMap(str string, list map[string]string) bool {
+	for _, v := range list {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
 //logNewCall - Function takes ServiceNow call data in a map, and logs to Hornbill
 func logNewCall(callClass string, callMap map[string]interface{}, snCallID string) (bool, string) {
 
@@ -1143,25 +1152,44 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 	strMapping := ""
 	strServiceBPM := ""
 	boolUpdateLogDate := false
+	boolUpdateCreatedBy := false
 	strLoggedDate := ""
+	strCreatedBy := ""
 	strClosedDate := ""
+	analystIDFields := make(map[string]string)
+	analystIDFields["h_ownerid"] = "h_ownername"
+	analystIDFields["h_createdby"] = ""
+	analystIDFields["h_closedby_user_id"] = "h_closedby_username"
+	analystIDFields["h_resolvedby_user_id"] = "h_resolvedby_username"
+	analystIDFields["h_reopenedby_user_id"] = "h_reopenedby_username"
+	analystIDFields["h_lastmodifieduserid"] = "h_lastmodifiedusername"
+
+	teamIDFields := make(map[string]string)
+	teamIDFields["h_fk_team_id"] = "h_fk_team_name"
+	teamIDFields["h_closedby_team_id"] = "h_closedby_teamname"
+	teamIDFields["h_resolvedby_team_id"] = "h_resolvedby_teamname"
+	teamIDFields["h_reopenedby_team_id"] = "h_reopenedby_teamname"
+
 	//Loop through core fields from config, add to XMLMC Params
 	for k, v := range mapGenericConf.CoreFieldMapping {
 		boolAutoProcess := true
 		strAttribute = fmt.Sprintf("%v", k)
 		strMapping = fmt.Sprintf("%v", v)
 
-		//Owning Analyst Name
-		if strAttribute == "h_ownerid" {
-			strOwnerID := getFieldValue(strMapping, callMap)
-			if strOwnerID != "" {
-				boolAnalystExists, strOwnerID := doesAnalystExist(strOwnerID)
-				if boolAnalystExists {
-					//Get analyst from cache as exists
-					analystIsInCache, strOwnerName, strOwnerID := recordInCache(strOwnerID, "Analyst")
-					if analystIsInCache && strOwnerName != "" {
-						espXmlmc.SetParam(strAttribute, strOwnerID)
-						espXmlmc.SetParam("h_ownername", strOwnerName)
+		//Analyst Fields
+		if nameField, ok := analystIDFields[strAttribute]; ok {
+			strAnalystID := getFieldValue(strMapping, callMap)
+			if strAnalystID != "" {
+				analystIsInCache, strOwnerName, strAnalystID := recordInCache(strAnalystID, "Analyst")
+				if analystIsInCache && strOwnerName != "" {
+					if strAttribute == "h_createdby" {
+						strCreatedBy = strAnalystID
+						boolUpdateCreatedBy = true
+					} else {
+						espXmlmc.SetParam(strAttribute, strAnalystID)
+						if nameField != "" {
+							espXmlmc.SetParam(nameField, strOwnerName)
+						}
 					}
 				}
 			}
@@ -1271,7 +1299,7 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 		}
 
 		// Team ID and Name
-		if strAttribute == "h_fk_team_id" {
+		if nameField, ok := teamIDFields[strAttribute]; ok {
 			//-- Get Team ID
 			snTeamID := getFieldValue(strMapping, callMap)
 			strTeamID, strTeamName := getCallTeamID(snTeamID)
@@ -1281,7 +1309,7 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 			}
 			if strTeamID != "" && strTeamName != "" {
 				espXmlmc.SetParam(strAttribute, strTeamID)
-				espXmlmc.SetParam("h_fk_team_name", strTeamName)
+				espXmlmc.SetParam(nameField, strTeamName)
 			}
 			boolAutoProcess = false
 		}
@@ -1321,6 +1349,10 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 			}
 		}
 
+		//			strAttribute != "h_ownername" &&
+		//			strAttribute != "h_closedby_username" &&
+		//			strAttribute != "h_resolvedby_username" &&
+
 		//Everything Else
 		if boolAutoProcess &&
 			strAttribute != "h_requesttype" &&
@@ -1331,8 +1363,9 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 			strAttribute != "h_fk_team_name" &&
 			strAttribute != "h_site" &&
 			strAttribute != "h_fk_priorityname" &&
-			strAttribute != "h_ownername" &&
 			strAttribute != "h_fk_user_name" &&
+			!(inMap(strAttribute, analystIDFields)) &&
+			!(inMap(strAttribute, teamIDFields)) &&
 			strAttribute != "h_datelogged" &&
 			strAttribute != "h_dateresolved" &&
 			strAttribute != "h_dateclosed" {
@@ -1466,6 +1499,32 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 				espXmlmc.OpenElement("record")
 				espXmlmc.SetParam("h_pk_reference", strNewCallRef)
 				espXmlmc.SetParam("h_datelogged", strLoggedDate)
+				espXmlmc.CloseElement("record")
+				espXmlmc.CloseElement("primaryEntityData")
+				XMLBPM, xmlmcErr := espXmlmc.Invoke("data", "entityUpdateRecord")
+				if xmlmcErr != nil {
+					//log.Fatal(xmlmcErr)
+					logger(4, "Unable to update Log Date of request ["+strNewCallRef+"] : "+xmlmcErr.Error(), false)
+				}
+				var xmlRespon xmlmcResponse
+
+				errLogDate := xml.Unmarshal([]byte(XMLBPM), &xmlRespon)
+				if errLogDate != nil {
+					logger(4, "Unable to update Log Date of request ["+strNewCallRef+"] : "+errLogDate.Error(), false)
+				}
+				if xmlRespon.MethodResult != "ok" {
+					logger(4, "Unable to update Log Date of request ["+strNewCallRef+"] : "+xmlRespon.State.ErrorRet, false)
+				}
+			}
+
+			//Now update CreatedBy
+			if boolUpdateCreatedBy {
+				espXmlmc.SetParam("application", appServiceManager)
+				espXmlmc.SetParam("entity", "Requests")
+				espXmlmc.OpenElement("primaryEntityData")
+				espXmlmc.OpenElement("record")
+				espXmlmc.SetParam("h_pk_reference", strNewCallRef)
+				espXmlmc.SetParam("h_createdby", strCreatedBy)
 				espXmlmc.CloseElement("record")
 				espXmlmc.CloseElement("primaryEntityData")
 				XMLBPM, xmlmcErr := espXmlmc.Invoke("data", "entityUpdateRecord")
@@ -1935,21 +1994,6 @@ func getCategoryID(categoryCode, categoryGroup string) (string, string) {
 	return categoryID, categoryString
 }
 
-//doesAnalystExist takes an Analyst ID string and returns a true if one exists in the cache or on the Instance
-func doesAnalystExist(analystID string) (bool, string) {
-	strReturnID := ""
-	boolAnalystExists := false
-	if analystID != "" {
-		analystIsInCache, strReturn, X := recordInCache(analystID, "Analyst")
-		strReturnID = X
-		//-- Check if we have cached the Analyst already
-		if analystIsInCache && strReturn != "" {
-			boolAnalystExists = true
-		}
-	}
-	return boolAnalystExists, strReturnID
-}
-
 //doesCustomerExist takes a Customer ID string and returns a true if one exists in the cache or on the Instance
 func doesCustomerExist(customerID string) bool {
 	espXmlmc, err := NewEspXmlmcSession()
@@ -2036,6 +2080,7 @@ func recordInCache(recordName, recordType string) (bool, string, string) {
 			if strings.EqualFold(service.ServiceName, recordName) {
 				boolReturn = true
 				strReturn = strconv.Itoa(service.ServiceID)
+				break
 			}
 		}
 		mutexServices.Unlock()
@@ -2046,6 +2091,7 @@ func recordInCache(recordName, recordType string) (bool, string, string) {
 			if strings.EqualFold(priority.PriorityName, recordName) {
 				boolReturn = true
 				strReturn = strconv.Itoa(priority.PriorityID)
+				break
 			}
 		}
 		mutexPriorities.Unlock()
@@ -2056,6 +2102,7 @@ func recordInCache(recordName, recordType string) (bool, string, string) {
 			if strings.EqualFold(site.SiteName, recordName) {
 				boolReturn = true
 				strReturn = strconv.Itoa(site.SiteID)
+				break
 			}
 		}
 		mutexSites.Unlock()
@@ -2066,17 +2113,23 @@ func recordInCache(recordName, recordType string) (bool, string, string) {
 			if strings.EqualFold(team.TeamName, recordName) {
 				boolReturn = true
 				strReturn = team.TeamID
+				break
 			}
 		}
 		mutexTeams.Unlock()
 	case "Analyst":
 		//-- Check if record in Analyst Cache
+		//logger(1, "Finding: "+recordName, false)
 		mutexAnalysts.Lock()
 		for _, analyst := range analysts {
+			//logger(1, "Checking: "+analyst.AnalystID, false)
+
 			if strings.EqualFold(analyst.AnalystID, recordName) {
+				//logger(1, "Found: "+analyst.AnalystName+" ("+analyst.AnalystHandle+")", false)
 				boolReturn = true
 				strReturnID = analyst.AnalystHandle
 				strReturn = analyst.AnalystName
+				break
 			}
 		}
 		mutexAnalysts.Unlock()

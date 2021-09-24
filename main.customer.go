@@ -56,6 +56,7 @@ func loadUsers() {
 	getUserAccountList(count)
 
 	logger(1, "Users Loaded: "+strconv.Itoa(len(customers)), false)
+	logger(1, "Analysts Loaded: "+strconv.Itoa(len(analysts)), false)
 }
 
 func getUserAccountList(count uint64) {
@@ -237,6 +238,6 @@ func getUserID(userID string) (UserID, userURN, userName string) {
 	} else {
 		UserID = userID
 	}
-	logger(4, "User Mapping:"+UserID+":"+userID+":"+userName+":"+userURN, false)
+	logger(1, "User Mapping:"+UserID+":"+userID+":"+userName+":"+userURN, false)
 	return
 }

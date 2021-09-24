@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 1.3.1 (September 24th, 2021)
+
+Changes:
+- Allow for Analyst recognition on various fields (h_ownerid, h_createdby, h_closedby_user_id, h_resolvedby_user_id, h_reopenedby_user_id, h_lastmodifieduserid)
+- Allow for team ID mapping on various fields (h_fk_team_id, h_closedby_team_id, h_resolvedby_team_id, h_reopenedby_team_id)
+
+Fixes:
+- file attachments - there was an issue if a specific ID was too long
+- ensure createdby is set correctly (instead of picking up the API Key's context user).
+
 ## 1.3.0 (September 13th, 2021)
 
 Changes:
@@ -22,7 +32,7 @@ Change:
 
 - Rebuilt using latest version of goApiLib, to fix possible issue with connections via a proxy
 
-## 1.1.0 (August 25th, 2020)
+## 1.1.0 (August 25th, 2020)
 
 Changes:
 
@@ -30,7 +40,7 @@ Changes:
 - Changed BPM spawning to use processSpawn2 instead of processSpawn
 - Added version checking code
 
-## 1.0.1 (April 16th, 2020)
+## 1.0.1 (April 16th, 2020)
 
 Changes:
 
