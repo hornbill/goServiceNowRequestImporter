@@ -3,8 +3,7 @@
 
 ## 1.3.2 (January 28th, 2022)
 
-### Fix
-
+Fix:
 - Fixed prefix issue caused by API change
 
 
