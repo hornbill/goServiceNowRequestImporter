@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.3.3 (April 1st, 2022)
+
+### Change
+
+- Updated code to support application segregation
 
 ## 1.3.2 (January 28th, 2022)
 
