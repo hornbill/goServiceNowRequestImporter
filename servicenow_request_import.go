@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version           = "1.3.3"
+	version           = "1.4.0"
 	repo              = "goServiceNowRequestImporter"
 	appServiceManager = "com.hornbill.servicemanager"
 )
@@ -1516,6 +1516,8 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 					logger(4, "Unable to update Log Date of request ["+strNewCallRef+"] : "+xmlRespon.State.ErrorRet, false)
 				}
 			}
+			//Now add status history
+			addStatusHistory(strNewCallRef, strStatus, strLoggedDate, espXmlmc)
 
 			//Now update CreatedBy
 			if boolUpdateCreatedBy {
@@ -1645,6 +1647,38 @@ func logNewCall(callClass string, callMap map[string]interface{}, snCallID strin
 	}
 
 	return boolCallLoggedOK, strNewCallRef
+}
+
+func addStatusHistory(requestRef, requestStatus, dateLogged string, espXmlmc *apiLib.XmlmcInstStruct) {
+	espXmlmc.SetParam("application", "com.hornbill.servicemanager")
+	espXmlmc.SetParam("entity", "RequestStatusHistory")
+	espXmlmc.OpenElement("primaryEntityData")
+	espXmlmc.OpenElement("record")
+	espXmlmc.SetParam("h_request_id", requestRef)
+	espXmlmc.SetParam("h_status", requestStatus)
+	espXmlmc.SetParam("h_timestamp", dateLogged)
+	espXmlmc.CloseElement("record")
+	espXmlmc.CloseElement("primaryEntityData")
+	XMLPub := espXmlmc.GetParam()
+	XMLPublish, xmlmcErr := espXmlmc.Invoke("data", "entityAddRecord")
+	if xmlmcErr != nil {
+		logger(4, "XMLMC error: Unable to add status history record for ["+requestRef+"] : "+xmlmcErr.Error(), false)
+		logger(1, XMLPub, false)
+		return
+	}
+	var xmlRespon xmlmcResponse
+	errLogDate := xml.Unmarshal([]byte(XMLPublish), &xmlRespon)
+	if errLogDate != nil {
+		logger(4, "Unmarshal error: Unable to add status history record for ["+requestRef+"] : "+errLogDate.Error(), false)
+		logger(1, XMLPub, false)
+		return
+	}
+	if xmlRespon.MethodResult != "ok" {
+		logger(4, "MethodResult not OK: Unable to add status history record for ["+requestRef+"] : "+xmlRespon.State.ErrorRet, false)
+		logger(1, XMLPub, false)
+		return
+	}
+	logger(1, "Request Status History record success: ["+requestRef+"]", false)
 }
 
 //convExtendedColName - takes old extended column name, returns new one (supply h_custom_a returns h_custom_1 for example)

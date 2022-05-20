@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.4.0 (May 20th, 2022)
+
+### Feature 
+
+- Added logic to create initial status history record, to support changes in Service Manager
+
 ## 1.3.3 (April 1st, 2022)
 
 ### Change
